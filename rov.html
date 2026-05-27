@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基隆海底 ROV 清除垃圾任務</title>
+    <style>
+        /* ==========================================
+           1. 網頁的基本設定與背景 (CSS) 
+           ========================================== */
+        body {
+            margin: 0;
+            overflow: hidden; /* 隱藏畫面外的元素與捲軸 */
+            /* 加上半透明的白色線條作為方格，並改用鮮豔的卡通漸層背景 */
+            background: 
+                linear-gradient(rgba(255, 255, 255, 0.4) 2px, transparent 2px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.4) 2px, transparent 2px),
+                linear-gradient(to bottom, #0abde3, #2e86de);
+            background-size: 100px 100px, 100px 100px, 100% 100%; /* 設定每一格為 100x100 像素 */
+            font-family: 'Comic Sans MS', 'Chalkboard SE', "微軟正黑體", sans-serif;
+            color: #333;
+            height: 100vh; /* 網頁高度設為整個螢幕 */
+            position: relative;
+        }
+
+        /* 右上角的計分板設定 (卡通風格) */
+        #score-board {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 32px;
+            font-weight: bold;
+            background-color: #ffdd59; /* 鮮豔的黃色 */
+            color: #333; /* 深色文字 */
+            padding: 10px 20px;
+            border-radius: 16px;
+            border: 5px solid #333; /* 粗黑邊框 */
+            z-index: 100; /* 確保計分板在最上層 */
+            box-shadow: 6px 6px 0px #333; /* 實心的卡通陰影 */
+        }
+
+        /* ==========================================
+           2. 主角 ROV 與頭燈的設定 
+           ========================================== */
+        #rov-container {
+            position: absolute;
+            /* 移除原本的固定置中，改由 JavaScript 控制位置，並加入平滑移動動畫 */
+            top: 300px;
+            left: 200px;
+            transition: top 0.3s ease, left 0.3s ease; 
+            z-index: 10;
+        }
+
+        #rov-body {
+            font-size: 80px; /* 用 emoji 當作 ROV */
+            /* 加上多重文字陰影來模擬卡通的「粗黑邊框」效果 */
+            text-shadow: 3px 3px 0 #333, -2px -2px 0 #333, 2px -2px 0 #333, -2px 2px 0 #333, 2px 2px 0 #333;
+        }
+
+        /* ROV 的頭燈光束 */
+        #light-beam {
+            position: absolute;
+            top: 30px;
+            left: 70px; /* 讓光束從 ROV 的右側發射出去 */
+            width: 500px;
+            height: 150px;
+            /* 光束改為更飽和的卡通純黃色 */
+            background: linear-gradient(to right, rgba(255, 234, 0, 0.9), rgba(255, 234, 0, 0));
+            /* 把長方形切成光束展開的扇形狀 */
+            clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 60%);
+            opacity: 0; /* 預設為 0 (隱藏看不見) */
+            transition: opacity 0.15s ease-in-out; /* 開燈關燈時的漸變動畫速度 */
+            pointer-events: none; /* 讓光束不會干擾滑鼠點擊 */
+        }
+
+        /* 當 JavaScript 幫頭燈加上 "on" 這個類別時，透明度變為 1 (顯示) */
+        #light-beam.on {
+            opacity: 1;
+        }
+
+        /* ==========================================
+           3. 海洋垃圾的設定 
+           ========================================== */
+        .trash {
+            position: absolute;
+            font-size: 50px;
+            /* 設定消失時的動畫：透明度變 0，且往上飄動並縮小 */
+            transition: all 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55); 
+            z-index: 5;
+            /* 一樣為垃圾加上粗黑邊框效果 */
+            text-shadow: 3px 3px 0 #333, -2px -2px 0 #333, 2px -2px 0 #333, -2px 2px 0 #333, 2px 2px 0 #333;
+        }
+
+        /* 垃圾被清除時會加上的 CSS 類別 */
+        .cleared {
+            opacity: 0; /* 變透明 */
+            /* 往上飄、縮小，並加上卡通般的 180度旋轉效果 */
+            transform: translateY(-50px) scale(0) rotate(180deg); 
+        }
+
+        /* 新增：加分時的分數彈跳動畫 */
+        @keyframes scoreBump {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.5); color: #ff4757; /* 放大並變成紅色 */ }
+            100% { transform: scale(1); }
+        }
+        
+        .bump {
+            animation: scoreBump 0.3s ease;
+            display: inline-block;
+        }
+
+        /* 底部裝飾：海床沙地 */
+        #seabed {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 15%;
+            background: #1dd1a1; /* 卡通亮綠色 */
+            border-top: 6px solid #333; /* 頂部粗黑線 */
+            z-index: 1;
+            border-top-left-radius: 40px;
+            border-top-right-radius: 40px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 右上角計分板 -->
+    <div id="score-board">清理分數: <span id="score">0</span></div>
+
+    <!-- 畫面中間的主角 ROV 與光束 -->
+    <div id="rov-container">
+        <!-- 這裡用淺水艇/機器人 emoji 代表 ROV -->
+        <div id="rov-body">🚁</div> 
+        <!-- 手電筒光束 -->
+        <div id="light-beam"></div>
+    </div>
+
+    <!-- 散落在右側的三個海洋垃圾 -->
+    <!-- 改用像素(px)定位，讓它們剛好對齊 100x100 的方格 -->
+    <div class="trash" style="top: 200px; left: 500px;">🥤</div>
+    <div class="trash" style="top: 400px; left: 700px;">🛍️</div>
+    <div class="trash" style="top: 500px; left: 600px;">🥫</div>
+
+    <!-- 底部海床裝飾 -->
+    <div id="seabed"></div>
+
+    <!-- ==========================================
+         4. 互動邏輯 (JavaScript) 
+         ========================================== -->
+    <script>
+        // 1. 準備需要的變數 (就像是準備工具箱)
+        let score = 0;                                       // 紀錄目前分數
+        const scoreDisplay = document.getElementById('score'); // 抓取網頁上的分數文字
+        const lightBeam = document.getElementById('light-beam'); // 抓取光束元素
+        const trashList = document.querySelectorAll('.trash');   // 抓取畫面上所有的垃圾 (會變成一個清單)
+
+        // 新增：抓取 ROV 容器，並設定初始位置與每一次移動的距離 (100px)
+        const rovContainer = document.getElementById('rov-container');
+        let rovX = 200; // 起始 X 座標 (對應 left)
+        let rovY = 300; // 起始 Y 座標 (對應 top)
+        const step = 100; // 每一格的大小為 100px
+
+        // 新增：檢查是否碰到垃圾的函式 (碰撞偵測)
+        function checkCollision() {
+            // 把畫面上的每一個垃圾都拿出來檢查一遍
+            trashList.forEach(function(trash) {
+                // 如果這個垃圾已經被吃掉了(有 cleared 樣式)，就直接跳過不檢查
+                if (trash.classList.contains('cleared')) return;
+
+                // 取得這個垃圾目前的座標 (去掉 px 單位並轉換成數字)
+                const trashX = parseInt(trash.style.left);
+                const trashY = parseInt(trash.style.top);
+
+                // 如果 ROV 的座標跟垃圾的座標一模一樣，代表碰到了！
+                if (rovX === trashX && rovY === trashY) {
+                    trash.classList.add('cleared'); // 讓垃圾播放消失動畫
+                    score++;                        // 分數加 1
+                    
+                    // 更新分數並播放彈跳動畫
+                    scoreDisplay.innerText = score; 
+                    scoreDisplay.classList.add('bump');
+                    
+                    // 0.3秒後移除彈跳動畫，這樣下次得分才能再跳一次
+                    setTimeout(function() {
+                        scoreDisplay.classList.remove('bump');
+                    }, 300);
+                }
+            });
+        }
+
+        // 2. 告訴電腦：當有人按下鍵盤時，要做什麼事
+        document.addEventListener('keydown', function(event) {
+            
+            // 新增保護機制：如果目前不是在「遊戲任務」頁面，就不執行方向鍵與空白鍵的控制
+            if (!document.getElementById('page-game').classList.contains('active')) {
+                return; 
+            }
+
+            // 處理 ROV 的上下左右移動 (使用鍵盤方向鍵)
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
+                event.preventDefault(); // 防止方向鍵讓整個網頁捲動
+                
+                if (event.code === 'ArrowUp') rovY -= step;   // 往上
+                if (event.code === 'ArrowDown') rovY += step; // 往下
+                if (event.code === 'ArrowLeft') rovX -= step; // 往左
+                if (event.code === 'ArrowRight') rovX += step;// 往右
+                
+                // 更新 ROV 在畫面上的新位置
+                rovContainer.style.top = rovY + 'px';
+                rovContainer.style.left = rovX + 'px';
+
+                // 🚀 關鍵步驟：每次移動後，檢查有沒有碰到垃圾
+                checkCollision();
+            }
+
+            // 檢查按下的是不是「空白鍵」(Space)
+            if (event.code === 'Space') {
+                
+                // 防止空白鍵預設的網頁向下捲動功能
+                event.preventDefault(); 
+
+                // 保留空白鍵的功能：只用來開啟頭燈照明
+                lightBeam.classList.add('on');
+
+                // 設定一個計時器，讓頭燈在 0.25 秒 (250毫秒) 後自動關閉
+                setTimeout(function() {
+                    lightBeam.classList.remove('on');
+                }, 250);
+            }
+        });
+    </script>
+
+</body>
+</html>
