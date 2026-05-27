@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基隆海底 ROV 清除垃圾任務</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: linear-gradient(to bottom, #0abde3, #2e86de); font-family: 'Comic Sans MS', 'Chalkboard SE', "微軟正黑體", sans-serif; color: #333; height: 100vh; position: relative; }
+        
+        #navbar { position: fixed; top: 0; left: 0; width: 100%; background-color: #333; padding: 10px 0; text-align: center; z-index: 1000; border-bottom: 5px solid #000; }
+        #navbar button { background-color: #ffdd59; border: 3px solid #000; border-radius: 10px; padding: 8px 16px; margin: 0 5px; font-size: 18px; font-weight: bold; cursor: pointer; transition: transform 0.1s; }
+        #navbar button:hover { transform: scale(1.05); }
+
+        .page { display: none; width: 100vw; height: 100vh; padding-top: 70px; box-sizing: border-box; position: absolute; top: 0; left: 0; overflow-y: auto; }
+        .page.active { display: block; }
+        
+        #page-game { background: linear-gradient(rgba(255, 255, 255, 0.4) 2px, transparent 2px), linear-gradient(90deg, rgba(255, 255, 255, 0.4) 2px, transparent 2px), linear-gradient(to bottom, #0abde3, #2e86de); background-size: 100px 100px; padding-top: 0; }
+        
+        #score-board { position: absolute; top: 80px; right: 30px; font-size: 32px; font-weight: bold; background-color: #ffdd59; padding: 10px 20px; border-radius: 16px; border: 5px solid #333; z-index: 100; box-shadow: 6px 6px 0px #333; }
+        #rov-container { position: absolute; width: 80px; height: 80px; transition: top 0.2s ease, left 0.2s ease; z-index: 10; display: flex; align-items: center; justify-content: center; }
+        #rov-body { font-size: 60px; text-shadow: 3px 3px 0 #333; }
+        .trash { position: absolute; font-size: 50px; width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; transition: all 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55); z-index: 5; text-shadow: 3px 3px 0 #333; }
+        .cleared { opacity: 0; transform: translateY(-50px) scale(0) rotate(180deg); }
+        
+        .content-container { max-width: 800px; margin: 40px auto; background: rgba(255, 255, 255, 0.95); padding: 30px; border-radius: 20px; border: 5px solid #333; box-shadow: 8px 8px 0px #333; }
+        #tank { width: 300px; height: 350px; border: 5px solid #333; background: linear-gradient(to bottom, #dff9fb 50%, #7ed6df 50%); margin: 20px auto; position: relative; border-radius: 15px; }
+        #exp-rov { font-size: 70px; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); transition: top 1s ease; }
+        .exp-btn { background-color: #0abde3; color: white; border: 3px solid #333; padding: 10px 20px; font-size: 20px; font-weight: bold; border-radius: 10px; cursor: pointer; margin: 10px; }
+    </style>
+</head>
+<body>
+
+    <nav id="navbar">
+        <button onclick="switchPage('page-game')">🎮 ROV 任務</button>
+        <button onclick="switchPage('page-knowledge')">📚 海洋知識</button>
+        <button onclick="switchPage('page-experiment')">⚖️ 浮力實驗</button>
+        <button onclick="switchPage('page-quiz')">📝 知識測驗</button>
+    </nav>
+
+    <div id="page-game" class="page active">
+        <div id="score-board">分數: <span id="score">0</span></div>
+        <div id="rov-container" style="top: 200px; left: 200px;"><div id="rov-body">🚁</div></div>
+        <div class="trash" style="top: 200px; left: 500px;">🥤</div>
+        <div class="trash" style="top: 400px; left: 700px;">🛍️</div>
+        <div class="trash" style="top: 500px; left: 600px;">🥫</div>
+    </div>
+
+    <div id="page-knowledge" class="page">
+        <div class="content-container">
+            <h2>🌊 海洋垃圾教學</h2>
+            <p>塑膠袋、鋁罐與廢漁網會嚴重影響海洋生物的生存。ROV 可以協助我們在深海撿拾這些垃圾。</p>
+        </div>
+    </div>
+
+    <div id="page-experiment" class="page">
+        <div class="content-container" style="text-align: center;">
+            <h2>⚖️ 浮力實驗</h2>
+            <div id="tank"><div id="exp-rov">🚁</div></div>
+            <button class="exp-btn" onclick="dive()">注水下潛</button>
+            <button class="exp-btn" onclick="floatUp()">排水上浮</button>
+        </div>
+    </div>
+
+    <div id="page-quiz" class="page">
+        <div class="content-container">
+            <h2>📝 知識測驗</h2>
+            <p>ROV 是靠什麼原理上下潛水的？</p>
+            <label><input type="radio" name="q" value="A"> 魔法</label><br>
+            <label><input type="radio" name="q" value="C"> 浮力與重量</label><br>
+            <button class="exp-btn" onclick="alert('請檢查選項並提交')">送出</button>
+        </div>
+    </div>
+
+    <script>
+        function switchPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+        
+        let score = 0;
+        const rov = document.getElementById('rov-container');
+        // 設定與 CSS 初始位置完全同步
+        let rovX = 200, rovY = 200;
+
+        document.addEventListener('keydown', (e) => {
+            if (!document.getElementById('page-game').classList.contains('active')) return;
+            const step = 100;
+            if (e.key === 'ArrowUp') rovY -= step;
+            else if (e.key === 'ArrowDown') rovY += step;
+            else if (e.key === 'ArrowLeft') rovX -= step;
+            else if (e.key === 'ArrowRight') rovX += step;
+            else return;
+
+            e.preventDefault();
+            rov.style.top = rovY + 'px';
+            rov.style.left = rovX + 'px';
+
+            document.querySelectorAll('.trash').forEach(t => {
+                const tx = parseInt(t.style.left), ty = parseInt(t.style.top);
+                // 檢查是否重疊 (距離小於 50 像素)
+                if (!t.classList.contains('cleared') && Math.abs(rovX - tx) < 50 && Math.abs(rovY - ty) < 50) {
+                    t.classList.add('cleared');
+                    score++;
+                    document.getElementById('score').innerText = score;
+                }
+            });
+        });
+
+        function dive() { document.getElementById('exp-rov').style.top = '80%'; }
+        function floatUp() { document.getElementById('exp-rov').style.top = '20%'; }
+    </script>
+</body>
+</html>
